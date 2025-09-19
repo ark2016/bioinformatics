@@ -4,10 +4,13 @@ from numba import jit, prange, njit
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 import multiprocessing as mp
 import functools
+import warnings
+
+warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 @njit(cache=True, parallel=True)
 def compute_binom_coeffs_numba(size):
-    binom = np.ones(size, dtype=np.int32)
+    binom = np.ones(size, dtype=np.int64)
     for i in range(1, size):
         binom[i] = (binom[i-1] * (size - i)) // i
 
@@ -16,7 +19,7 @@ def compute_binom_coeffs_numba(size):
         if binom[i] > 12:
             binom[i] -= 26
 
-    return binom
+    return binom.astype(np.int32)
 
 @njit(cache=True, parallel=True)
 def compress_numba(string, compress_size, binom):
@@ -126,11 +129,10 @@ class SIMDOptimizedComparator:
             self.binom_cache[size] = self._compute_binom_vectorized(size)
 
     def _compute_binom_vectorized(self, size):
-        indices = np.arange(size)
         binom = np.ones(size, dtype=np.int64)
 
         for i in range(1, size):
-            binom[i] = binom[i-1] * (size - i) // i
+            binom[i] = (binom[i-1] * (size - i)) // i
 
         binom = binom % 26
         mask = binom > 12
