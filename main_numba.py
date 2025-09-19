@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 import multiprocessing as mp
 import functools
 import warnings
+from tqdm import tqdm
 
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
@@ -226,10 +227,12 @@ class HybridOptimizedComparator:
     
     def _process_numba_threaded(self, strings_batch, test_arr):
         results = np.zeros(len(strings_batch), dtype=np.float32)
+        progress_bar = tqdm(total=len(strings_batch), desc="Comparing genomes")
 
         def process_chunk(start_idx, end_idx):
             for i in range(start_idx, end_idx):
                 results[i] = self.numba_comp.compare_pair(strings_batch[i], test_arr)
+                progress_bar.update(1)
 
         chunk_size = len(strings_batch) // self.n_threads
         threads = []
@@ -243,6 +246,7 @@ class HybridOptimizedComparator:
             for thread in threads:
                 thread.result()
 
+        progress_bar.close()
         return results
     
     def _process_multiprocess(self, strings_batch, test_arr):
@@ -261,9 +265,11 @@ class HybridOptimizedComparator:
                 futures.append(future)
 
             results = np.zeros(len(strings_batch), dtype=np.float32)
-            for future in futures:
-                chunk_results, offset = future.result()
-                results[offset:offset+len(chunk_results)] = chunk_results
+            with tqdm(total=len(futures), desc="Processing chunks") as pbar:
+                for future in futures:
+                    chunk_results, offset = future.result()
+                    results[offset:offset+len(chunk_results)] = chunk_results
+                    pbar.update(1)
 
         return results
     
@@ -294,35 +300,62 @@ class FastGenomeProcessor:
             return False
 
     def process_file(self, filename, test_genome):
-        from parser import simple_parse
+        print("Loading and parsing genome data...")
 
-        genomes, names = simple_parse(filename)
+        if filename.endswith('.csv'):
+            import pandas as pd
+            df = pd.read_csv(filename)
 
-        genome_arrays = [self.string2arr(g) for g in genomes]
+            # Apply limit if set
+            if hasattr(self, 'max_records') and self.max_records:
+                df = df.head(self.max_records)
+                print(f"Limited to {len(df)} records")
+
+            genomes = df['sequence'].tolist()
+            names = df.get('description', [f'Sequence_{i}' for i in range(len(genomes))]).tolist()
+        else:
+            from parser import simple_parse
+            genomes, names = simple_parse(filename)
+
         test_arr = self.string2arr(test_genome)
 
         if self.use_gpu:
             results = None
         else:
-            results = self.processor.process_batch(genome_arrays, test_arr)
+            print("Comparing genomes...")
+            results = self._process_streaming(genomes, test_arr)
 
         return results, names
+
+    def _process_streaming(self, genomes, test_arr):
+        """Stream processing approach like test_numba.py"""
+        results = np.zeros(len(genomes), dtype=np.float32)
+
+        for i, genome in tqdm(enumerate(genomes), total=len(genomes), desc="Comparing genomes"):
+            try:
+                genome_arr = self.string2arr(genome)
+                results[i] = self.processor.numba_comp.compare_pair(genome_arr, test_arr)
+            except Exception as e:
+                print(f"Error processing genome {i}: {e}")
+                results[i] = 0.0
+
+        return results
     
     @staticmethod
     def string2arr(string):
         return np.array([ord(c) - ord('A') for c in string], dtype=np.int32)
 
-    def find_similar_genomes(self, filename, test_genome, threshold=0.8):
+    def find_similar_genomes(self, filename, test_genome, top_n=100):
         results, names = self.process_file(filename, test_genome)
 
+        print("Finding similar genomes...")
         similar = []
-        for i, score in enumerate(results):
-            if score >= threshold:
-                similar.append((names[i], score))
+        for i, score in tqdm(enumerate(results), total=len(results), desc="Filtering results"):
+            similar.append((names[i], score))
 
         similar.sort(key=lambda x: x[1], reverse=True)
 
-        return similar
+        return similar[:top_n]
 
 def compress_fast(string, compress_size, compress_rule=None):
     if isinstance(string, list):
@@ -345,4 +378,36 @@ def batch_compare_fast(strings_batch, test_arr, compress_funcs=None):
             batch_arrays.append(s)
 
     return comp.process_batch(batch_arrays, test_arr)
+
+
+if __name__ == "__main__":
+    import sys
+
+    if len(sys.argv) < 2 or len(sys.argv) > 3:
+        print("Usage: python main_numba.py <search_string> [max_records]")
+        print("Example: python main_numba.py 'ATCG' 1000")
+        sys.exit(1)
+
+    search_string = sys.argv[1]
+    max_records = int(sys.argv[2]) if len(sys.argv) == 3 else None
+    csv_file = r"data\uniprot_data.csv"
+
+    print(f"Searching for: {search_string}")
+    print(f"In file: {csv_file}")
+    if max_records:
+        print(f"Limiting to first {max_records} records")
+
+    processor = FastGenomeProcessor()
+
+    # Add limit functionality
+    processor.max_records = max_records
+
+    similar_genomes = processor.find_similar_genomes(csv_file, search_string)
+
+    if similar_genomes:
+        print(f"\nFound {len(similar_genomes)} similar genomes:")
+        for name, score in similar_genomes:
+            print(f"{name}: {score:.4f}")
+    else:
+        print("No similar genomes found.")
 
