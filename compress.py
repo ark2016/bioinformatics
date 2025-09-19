@@ -1,4 +1,5 @@
 
+import numpy as np
 
 def compress(string, compress_size, compress_rule):
 	"""
@@ -9,33 +10,39 @@ def compress(string, compress_size, compress_rule):
 		compress_rule - правила КА(пример, функция haos_compress)
 	returns: новая строка размера len(string)-compress_size
 	"""
-	# TODO: нет проверки на безопасность данных
-	if compress_size <=1:
+	if compress_size <= 1:
 		return string
-	
-	# Обрабатываем КА
-	for i in range(len(string) - compress_size+1):
-		string[i] = compress_rule(string[i: i+compress_size])
-	
-	# Возвращаем уменьшенный массив чисел
-	return string[:-compress_size+1]
+
+	string = np.asarray(string, dtype=np.int32)
+	result_len = len(string) - compress_size + 1
+	result = np.zeros(result_len, dtype=np.int32)
+
+	# Векторизованная обработка КА
+	for i in range(result_len):
+		result[i] = compress_rule(string[i: i+compress_size])
+
+	return result.tolist()
 
 
-def haos_compress(vector): # тривиальная функция сжатия
-	return sum(vector) % 26	
-	
+def haos_compress(vector):
+	"""Тривиальная функция сжатия"""
+	return np.sum(vector) % 26
+
 def haos_compress_binom_gen(size):
-	binom = [1]*size
+	"""Генератор биномиальной функции сжатия с предвычисленными коэффициентами"""
+	# Предвычисляем биномиальные коэффициенты
+	binom = np.ones(size, dtype=np.int64)
 	for i in range(1, size):
-		binom[i] = binom[i-1]*(size-i)//i
-	
-	binom = list(map(lambda x: x%26-26 if x%26 > 12 else x%26, binom))
-	
+		binom[i] = binom[i-1] * (size - i) // i
+
+	# Применяем модуло и центрирование
+	binom = binom % 26
+	binom = np.where(binom > 12, binom - 26, binom)
+
 	def haos_compress_binom(vector):
-		res = 0
-		for i in range(size):
-			res += vector[i]*binom[i]
-		return res%26
+		vector = np.asarray(vector)
+		return np.dot(vector, binom) % 26
+
 	return haos_compress_binom
 	
 	
@@ -60,5 +67,5 @@ if __name__ == "__main__": # микротесты
 	if errors == 0:
 		print("test success")
 	else:
-		print("found", erors, "errors")
+		print("found", errors, "errors")
 	

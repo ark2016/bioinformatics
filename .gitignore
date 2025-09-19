@@ -1,0 +1,6 @@
+data/
+.venv
+__pycache__
+EDA.ipynb
+fast.py
+test*
