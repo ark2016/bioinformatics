@@ -390,7 +390,7 @@ if __name__ == "__main__":
 
     search_string = sys.argv[1]
     max_records = int(sys.argv[2]) if len(sys.argv) == 3 else None
-    csv_file = r"data\uniprot_data.csv"
+    csv_file = r"data/uniprot_data.csv"
 
     print(f"Searching for: {search_string}")
     print(f"In file: {csv_file}")
