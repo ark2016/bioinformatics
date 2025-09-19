@@ -12,16 +12,13 @@ def compress(string, compress_size, compress_rule):
 	# TODO: нет проверки на безопасность данных
 	if compress_size <=1:
 		return string
-
-	# Преобразуем строку символов в массив чисел
-	buff = list(map(lambda x: ord(x) - ord('A'), string))
 	
 	# Обрабатываем КА
 	for i in range(len(string) - compress_size+1):
-		buff[i] = compress_rule(buff[i: i+compress_size])
+		string[i] = compress_rule(string[i: i+compress_size])
 	
-	# Преобразуем массив чисел в строку
-	return "".join(list(map(lambda x: chr(x+ord('A')), buff[:-compress_size+1])))
+	# Возвращаем уменьшенный массив чисел
+	return string[:-compress_size+1]
 
 
 def haos_compress(vector): # тривиальная функция сжатия
@@ -32,7 +29,7 @@ def haos_compress_binom_gen(size):
 	for i in range(1, size):
 		binom[i] = binom[i-1]*(size-i)//i
 	
-	binom = list(map(lambda x: x%26-26 if x%26 > 13 else x%26, binom))
+	binom = list(map(lambda x: x%26-26 if x%26 > 12 else x%26, binom))
 	
 	def haos_compress_binom(vector):
 		res = 0

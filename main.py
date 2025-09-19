@@ -2,7 +2,6 @@ from parser import simple_parse
 from compress import compress, haos_compress_binom_gen
 from scalar_mul import scalar_compare
 
-
 def compare(stra, strb):
 	if len(stra) < len(strb):
 		stra, strb = strb, stra
@@ -13,11 +12,16 @@ def compare(stra, strb):
 	#print(stra, strb)
 	return scalar_compare(stra, strb)
 
+def string2arr(string):
+	return list(map(lambda x: ord(x) - ord('A'), string))
+
 def main(filename, test_string):
 	# Парсим файл
 	strings, names = simple_parse(filename)
 	
-	# Определяем разницу
+	strings = strings[:50000]
+	
+	# Определяем разницу для препросчета коэфициентов свертки. Пока не используется
 	"""
 	mindelta = abs(len(test_string)-len(strings[0]))
 	maxdelta = mindelta
@@ -28,12 +32,15 @@ def main(filename, test_string):
 		if delta < mindelta:
 			mindelta = delta
 	"""
+	
+	test_arr = string2arr(test_string)
+	
 	result = [0]*len(strings)
 	# основной цикл
 	for index in range(len(strings)):
-		if index%10 == 0:
+		if index%10 == 0: # вместо tqdm чтоб не нагружать проц
 			print(index, "/", len(strings), end="\r")
-		result[index] = compare(strings[index], test_string)
+		result[index] = compare(string2arr(strings[index]), test_arr)
 	
 	
 	indexed_list = [(index, value) for index, value in enumerate(result)]
