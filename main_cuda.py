@@ -113,47 +113,43 @@ def main_cuda(filename, test_string):
     print("Конвертация данных для GPU...")
     test_arr = string2arr_cuda(test_string)
 
-    # Конвертируем все строки и переносим на GPU батчами (увеличен размер)
-    string_arrays = []
-    conversion_batch_size = 10000  # Увеличен для Tesla T4
-
-    for i in range(0, len(strings), conversion_batch_size):
-        batch_end = min(i + conversion_batch_size, len(strings))
-        # Векторизованная конвертация батча
-        batch_strings = [string2arr_cuda(s) for s in strings[i:batch_end]]
-        string_arrays.extend(batch_strings)
-        if (i // conversion_batch_size) % 5 == 0:  # Уменьшен вывод
-            print(f"Конвертировано {batch_end}/{len(strings)} строк")
-            sys.stdout.flush()
-
-    print(f"\nВсе данные загружены в {'GPU' if CUDA_AVAILABLE else 'CPU'}")
+    # НЕ загружаем все данные в GPU память! Обрабатываем потоково
+    print(f"Обрабатываем {len(strings)} строк потоково (без предзагрузки в GPU)")
 
     # Кэш для биномиальных коэффициентов
     compress_funcs_cache = {}
 
-    # Обработка батчами на GPU (увеличен для Tesla T4)
-    processing_batch_size = 5000 if CUDA_AVAILABLE else 1000  # Увеличен в 2.5 раза
-    total_batches = (len(string_arrays) + processing_batch_size - 1) // processing_batch_size
+    # Потоковая обработка батчами
+    processing_batch_size = 8000 if CUDA_AVAILABLE else 1000  # Больше для потокового режима
+    total_batches = (len(strings) + processing_batch_size - 1) // processing_batch_size
 
-    print("Начинаем GPU обработку...")
+    print("Начинаем потоковую GPU обработку...")
     all_results = []
 
     for batch_idx in range(total_batches):
         start_idx = batch_idx * processing_batch_size
-        end_idx = min(start_idx + processing_batch_size, len(string_arrays))
+        end_idx = min(start_idx + processing_batch_size, len(strings))
 
-        if batch_idx % 3 == 0:  # Чаще выводим прогресс для больших батчей
-            print(f"Батч {batch_idx + 1}/{total_batches} ({start_idx}/{len(string_arrays)})")
+        if batch_idx % 2 == 0:  # Чаще выводим прогресс
+            print(f"Батч {batch_idx + 1}/{total_batches} ({start_idx}/{len(strings)})")
             sys.stdout.flush()
 
-        batch_strings = string_arrays[start_idx:end_idx]
+        # Конвертируем батч строк на лету
+        batch_strings = [string2arr_cuda(s) for s in strings[start_idx:end_idx]]
         batch_results = batch_compare_cuda(batch_strings, test_arr, compress_funcs_cache)
 
-        # Перенос результатов обратно на CPU для накопления
+        # Перенос результатов обратно на CPU
         if CUDA_AVAILABLE:
             batch_results = cp.asnumpy(batch_results)
 
         all_results.extend(batch_results)
+
+        # Очищаем GPU память после каждого батча
+        if CUDA_AVAILABLE:
+            for arr in batch_strings:
+                if hasattr(arr, 'device'):
+                    del arr
+            cp.get_default_memory_pool().free_all_blocks()
 
     print(f"\nОбработка завершена!")
     print(f"Использовано {len(compress_funcs_cache)} уникальных размеров сжатия")
