@@ -49,11 +49,16 @@ def compress_cuda(string, compress_size, binom_coeffs):
 
 def haos_compress_binom_gen_cuda(size):
     """Генератор биномиальных коэффициентов для CUDA"""
-    # Предвычисляем на CPU, затем переносим на GPU
+    # Предвычисляем на CPU с защитой от переполнения
     binom = np.ones(size, dtype=np.int64)
-    for i in range(1, size):
-        binom[i] = binom[i-1] * (size - i) // i
 
+    # Вычисляем биномиальные коэффициенты с применением модулю на каждом шаге
+    for i in range(1, size):
+        # Применяем модуль сразу для предотвращения переполнения
+        numerator = (binom[i-1] * (size - i)) % (26 * 1000000) 
+        binom[i] = numerator // i
+
+    # Финальное приведение к модулю 26
     binom = binom % 26
     binom = np.where(binom > 12, binom - 26, binom)
 
