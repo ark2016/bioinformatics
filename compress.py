@@ -10,6 +10,8 @@ def compress(string, compress_size, compress_rule):
 	returns: новая строка размера len(string)-compress_size
 	"""
 	# TODO: нет проверки на безопасность данных
+	if compress_size <=1:
+		return string
 
 	# Преобразуем строку символов в массив чисел
 	buff = list(map(lambda x: ord(x) - ord('A'), string))

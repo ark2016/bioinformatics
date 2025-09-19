@@ -35,6 +35,7 @@ def scalar_compare(str1, str2):
 	sc11 = scalar2(arr1, arr1)
 	sc12 = scalar2(arr1, arr2)
 	sc22 = scalar2(arr2, arr2)
+	#print(sc11, sc12, sc22)
 	
 	# Вычисляем косинус угла между векторами
 	return sc12/(sc11**0.5 * sc22**0.5)
